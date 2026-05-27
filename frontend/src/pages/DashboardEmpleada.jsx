@@ -7,6 +7,19 @@ import { useAuth } from '../context/AuthContext'
 
 const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
+const MENSAJES_AREA = [
+  '¡Área lista! Dios ve tu esfuerzo ✨',
+  '¡Increíble trabajo! Sigue así 💪',
+  '¡Bien hecho! Tu dedicación marca la diferencia 🙏',
+  '¡Excelente! ¡Eres imparable! 🔥',
+  '¡Todo limpio! ¡Gracias por tu esfuerzo! 🌟',
+  '¡Área completada! ¡Qué orgullosas estamos de ti! 💜',
+  '¡Lo lograste! Cada área cuenta 🎯',
+  '¡Hermoso trabajo! La limpieza es un ministerio 🙌',
+]
+
+const mensajeRandom = () => MENSAJES_AREA[Math.floor(Math.random() * MENSAJES_AREA.length)]
+
 export default function DashboardEmpleada() {
   const { usuario } = useAuth()
   const [tareasSemana, setTareasSemana] = useState({}) // { 0: [...], 1: [...], ... }
@@ -80,8 +93,30 @@ export default function DashboardEmpleada() {
     try {
       const { data } = await axios.patch(`/api/tareas/${tareaId}/checklist/${itemId}`, { completado })
       actualizarTarea(diaIndex, data)
+
       if (data.estado === 'completada') {
-        toast.success('¡Área completada! 🎉')
+        // Mensaje por área completada
+        toast.success(mensajeRandom(), { duration: 3500 })
+
+        // Calcular cuántas quedan para hoy
+        const tareasActualizadas = (tareasSemana[diaIndex] || []).map(t => t.id === data.id ? data : t)
+        const pendientesHoy = tareasActualizadas.filter(t => t.estado !== 'completada').length
+
+        if (diaIndex === todayIndex) {
+          if (pendientesHoy === 0) {
+            // ¡Todas las del día completadas!
+            setTimeout(() => toast.success(
+              `¡Completaste TODAS tus tareas de hoy! ¡Eres una campeona! 🏆⭐`,
+              { duration: 6000, style: { background: '#7C3AED', color: '#fff', fontWeight: 'bold', fontSize: '15px' } }
+            ), 1000)
+          } else if (pendientesHoy === 1) {
+            setTimeout(() => toast(
+              '¡Ya casi terminas! Solo una tarea más 💪🎯',
+              { duration: 4000, icon: '🔥', style: { fontWeight: '600' } }
+            ), 600)
+          }
+        }
+
         await cargarBadges()
       }
     } catch { toast.error('Error') }
@@ -112,6 +147,11 @@ export default function DashboardEmpleada() {
   const tareasActivas = tareasDiaActivo.filter(t => t.estado !== 'completada')
   const tareasCompletadasDia = tareasDiaActivo.filter(t => t.estado === 'completada')
   const esDiaActivo = diaActivo === todayIndex
+
+  // Mensajes especiales
+  const esDiaCompleto = esDiaActivo && tareasDiaActivo.length > 0 && tareasActivas.length === 0
+  const esViernes = todayIndex === 4
+  const semanaCompleta = progresoSemana === 100 && todasTareas.length > 0
 
   if (cargando) return (
     <div className="flex items-center justify-center py-20">
@@ -148,6 +188,34 @@ export default function DashboardEmpleada() {
           {completadasSemana} de {todasTareas.length} tareas completadas esta semana
         </p>
       </div>
+
+      {/* 🏆 Semana completa */}
+      {semanaCompleta && (
+        <div className="card border-2 border-yellow-300 bg-gradient-to-r from-yellow-50 to-amber-50 text-center py-5">
+          <p className="text-4xl mb-2">🏆</p>
+          <p className="font-bold text-amber-800 text-lg">¡Semana perfecta!</p>
+          <p className="text-amber-700 text-sm mt-1">Completaste el 100% de tus tareas esta semana.</p>
+          <p className="text-amber-600 text-sm font-semibold mt-1">¡Gracias por dar tu 100%! Dios bendice tu trabajo 🙏</p>
+        </div>
+      )}
+
+      {/* 🎉 Día completo */}
+      {esDiaCompleto && !semanaCompleta && (
+        <div className="card border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 text-center py-4">
+          <p className="text-3xl mb-1">🎉</p>
+          <p className="font-bold text-green-800">¡Terminaste todas las tareas de hoy!</p>
+          <p className="text-green-600 text-sm mt-1">¡Excelente trabajo! Gracias por tu dedicación 💚</p>
+        </div>
+      )}
+
+      {/* 🌟 Mensaje de viernes */}
+      {esViernes && !semanaCompleta && todasTareas.length > 0 && (
+        <div className="card border-2 border-violet-200 bg-violet-50 text-center py-3">
+          <p className="text-2xl mb-1">🌟</p>
+          <p className="font-semibold text-violet-800 text-sm">¡Es viernes! ¡Casi terminamos la semana!</p>
+          <p className="text-violet-600 text-xs mt-0.5">Gracias por tu esfuerzo toda la semana 💜</p>
+        </div>
+      )}
 
       {/* Grupos activos hoy */}
       {gruposHoy.length > 0 && (
