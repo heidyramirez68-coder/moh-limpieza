@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import DashboardCoordinadora from './pages/DashboardCoordinadora'
+import DashboardSupervisora from './pages/DashboardSupervisora'
 import DashboardEmpleada from './pages/DashboardEmpleada'
 import AsignacionSemana from './pages/AsignacionSemana'
 import PlaybookPage from './pages/PlaybookPage'
@@ -22,7 +23,8 @@ function RutaProtegida({ children, roles }) {
 function RutaInicio() {
   const { usuario } = useAuth()
   if (!usuario) return <Navigate to="/login" />
-  if (usuario.rol === 'coordinadora' || usuario.rol === 'supervisora') return <Navigate to="/dashboard" />
+  if (usuario.rol === 'coordinadora') return <Navigate to="/dashboard" />
+  if (usuario.rol === 'supervisora') return <Navigate to="/supervision" />
   return <Navigate to="/mis-tareas" />
 }
 
@@ -34,8 +36,13 @@ export default function App() {
         <Route path="/cambiar-password" element={<RutaProtegida><CambiarPassword /></RutaProtegida>} />
         <Route path="/" element={<RutaInicio />} />
         <Route path="/dashboard" element={
-          <RutaProtegida roles={['coordinadora', 'supervisora']}>
+          <RutaProtegida roles={['coordinadora']}>
             <Layout><DashboardCoordinadora /></Layout>
+          </RutaProtegida>
+        } />
+        <Route path="/supervision" element={
+          <RutaProtegida roles={['supervisora']}>
+            <Layout><DashboardSupervisora /></Layout>
           </RutaProtegida>
         } />
         <Route path="/mis-tareas" element={
@@ -54,7 +61,7 @@ export default function App() {
           </RutaProtegida>
         } />
         <Route path="/reportes" element={
-          <RutaProtegida roles={['coordinadora']}>
+          <RutaProtegida roles={['coordinadora', 'supervisora']}>
             <Layout><ReportesPage /></Layout>
           </RutaProtegida>
         } />

@@ -28,6 +28,11 @@ export default function Layout({ children }) {
     socket.on('area_completada', ({ mensaje }) => toast.success(mensaje, { icon: '✅', duration: 5000 }))
     socket.on('nueva_alerta', ({ mensaje }) => toast.error(mensaje, { icon: '⚠️', duration: 8000 }))
     socket.on('nuevo_badge', ({ mensaje }) => toast.success(mensaje, { icon: '🌟', duration: 6000 }))
+    socket.on('tarea_revision', ({ mensaje }) => toast(mensaje, {
+      icon: '↩',
+      duration: 10000,
+      style: { background: '#dc2626', color: '#fff', fontWeight: '600' }
+    }))
 
     return () => socket.disconnect()
   }, [usuario])
@@ -41,7 +46,8 @@ export default function Layout({ children }) {
   ]
 
   const navSupervisora = [
-    { path: '/dashboard', label: 'Panel', icon: '📊' },
+    { path: '/supervision', label: 'Supervisión', icon: '🔍' },
+    { path: '/reportes', label: 'Reportes', icon: '📈' },
   ]
 
   const navEmpleada = [

@@ -110,6 +110,44 @@ router.post('/asignar-semana', authMiddleware, soloCoordinadora, async (req, res
   }
 })
 
+// PATCH verificar área (supervisora)
+router.patch('/:id/verificar', authMiddleware, coordinadoraOSupervisora, async (req, res) => {
+  try {
+    const { aprobada, nota } = req.body // aprobada: true/false
+    const tarea = await prisma.tareaAsignada.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        verificada: aprobada,
+        verificadaEn: new Date(),
+        verificadaPor: req.usuario.id,
+        notaVerif: nota || (aprobada ? '✓ Verificada' : '↩ Necesita revisión'),
+      },
+      include: {
+        area: true,
+        usuario: { select: { id: true, nombre: true, color: true } },
+      }
+    })
+
+    const io = req.app.get('io')
+    if (!aprobada) {
+      // Notificar a la empleada que debe revisar
+      io.to(`usuario_${tarea.usuarioId}`).emit('tarea_revision', {
+        tarea,
+        mensaje: `↩ ${req.usuario.nombre} revisó "${tarea.area.nombre}" — ${nota || 'Necesita revisión'}`
+      })
+    }
+    io.to('coordinadora').emit('area_verificada', {
+      tarea,
+      mensaje: `${aprobada ? '✅' : '↩'} Erika verificó: ${tarea.area.nombre} — ${aprobada ? 'OK' : (nota || 'Necesita revisión')}`
+    })
+
+    res.json(tarea)
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'Error verificando' })
+  }
+})
+
 // PATCH iniciar tarea
 router.patch('/:id/iniciar', authMiddleware, async (req, res) => {
   try {
