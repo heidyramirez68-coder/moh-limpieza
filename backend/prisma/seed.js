@@ -6,6 +6,13 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('🌱 Iniciando seed de MOH Limpieza...')
 
+  // ─── PROTECCIÓN: No borrar si ya hay datos ───────────────────
+  const userCount = await prisma.usuario.count()
+  if (userCount > 0) {
+    console.log('✅ La base de datos ya tiene datos. Saltando seed para proteger información existente.')
+    return
+  }
+
   // ─── LIMPIAR DATOS EXISTENTES ────────────────────────────────
   await prisma.checklistCompletacion.deleteMany()
   await prisma.checklistItem.deleteMany()

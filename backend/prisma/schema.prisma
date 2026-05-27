@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./moh_limpieza.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Usuario {

@@ -5,11 +5,11 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js",
-    "db:migrate": "prisma migrate dev",
+    "start": "npx prisma db push --accept-data-loss && node src/index.js",
+    "postinstall": "npx prisma generate",
     "db:seed": "node prisma/seed.js",
-    "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force && node prisma/seed.js"
+    "db:studio": "npx prisma studio",
+    "db:push": "npx prisma db push"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -22,7 +22,6 @@
     "dotenv": "^16.4.5",
     "express": "^4.18.3",
     "jsonwebtoken": "^9.0.2",
-    "puppeteer": "^22.4.0",
     "socket.io": "^4.7.4"
   },
   "devDependencies": {
