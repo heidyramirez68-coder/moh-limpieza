@@ -179,32 +179,12 @@ export default function AsignacionSemana() {
           {DIAS[filtroDia]}, {format(addDays(semanaInicio, filtroDia), "d 'de' MMMM", { locale: es })}
         </h3>
 
-        {/* Tareas asignadas */}
-        {tareasDelDia.length > 0 && (
-          <div className="space-y-2 mb-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Asignadas ({tareasDelDia.length})</p>
-            {tareasDelDia.map(tarea => (
-              <div key={tarea.id} className="card flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: tarea.usuario.color }}>
-                  {tarea.usuario.nombre.charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800">{tarea.area.nombre}</p>
-                  <p className="text-xs text-slate-400">{tarea.usuario.nombre}</p>
-                </div>
-                <button
-                  onClick={() => eliminarTarea(tarea.id, filtroDia, tarea.area.nombre, tarea.usuario.nombre)}
-                  className="text-xs text-red-500 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50 flex-shrink-0 font-medium"
-                >
-                  Quitar
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Áreas disponibles para asignar */}
-        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Asignar área</p>
+        {/* Contador + instrucción */}
+        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+          {tareasDelDia.length > 0
+            ? `${tareasDelDia.length} asignadas · toca nombre coloreado para quitar`
+            : 'Asignar área'}
+        </p>
         <div className="space-y-2">
           {areasFiltradas.map(area => {
             const tareasArea = tareasDelDia.filter(t => t.areaId === area.id)
