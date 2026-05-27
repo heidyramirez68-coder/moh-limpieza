@@ -122,7 +122,11 @@ router.patch('/:id/iniciar', authMiddleware, async (req, res) => {
     const actualizada = await prisma.tareaAsignada.update({
       where: { id: Number(req.params.id) },
       data: { estado: 'en_progreso', horaInicio: new Date() },
-      include: { area: true, usuario: { select: { id: true, nombre: true, color: true } } }
+      include: {
+        area: { include: { checklistItems: { where: { activo: true }, orderBy: { orden: 'asc' } } } },
+        usuario: { select: { id: true, nombre: true, color: true } },
+        checklistCompletaciones: true,
+      }
     })
 
     const io = req.app.get('io')
