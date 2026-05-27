@@ -6,11 +6,19 @@ const { addDays, format, startOfDay } = require('date-fns')
 const router = express.Router()
 const prisma = new PrismaClient()
 
+// Convierte "YYYY-MM-DD" a rango UTC del día completo (evita bugs de zona horaria)
+const rangoUtcDia = (fechaStr) => {
+  const [y, m, d] = fechaStr.split('-').map(Number)
+  return {
+    gte: new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0)),
+    lte: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
+  }
+}
+
 // GET tareas del día para el usuario actual (o todas si es coordinadora/supervisora)
 router.get('/dia/:fecha', authMiddleware, async (req, res) => {
   try {
-    const fecha = new Date(req.params.fecha)
-    const where = { fecha: startOfDay(fecha) }
+    const where = { fecha: rangoUtcDia(req.params.fecha) }
 
     // Empleadas solo ven sus tareas
     if (req.usuario.rol === 'empleada') {
@@ -37,9 +45,8 @@ router.get('/dia/:fecha', authMiddleware, async (req, res) => {
 // GET resumen del día (solo coordinadora/supervisora)
 router.get('/resumen/:fecha', authMiddleware, coordinadoraOSupervisora, async (req, res) => {
   try {
-    const fecha = new Date(req.params.fecha)
     const tareas = await prisma.tareaAsignada.findMany({
-      where: { fecha: startOfDay(fecha) },
+      where: { fecha: rangoUtcDia(req.params.fecha) },
       include: {
         area: true,
         usuario: { select: { id: true, nombre: true, color: true } },

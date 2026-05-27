@@ -75,9 +75,13 @@ const reportesRouter = express.Router()
 // Reporte diario
 reportesRouter.get('/diario/:fecha', authMiddleware, soloCoordinadora, async (req, res) => {
   try {
-    const fecha = startOfDay(new Date(req.params.fecha))
+    const [y, m, d] = req.params.fecha.split('-').map(Number)
+    const fechaRango = {
+      gte: new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0)),
+      lte: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
+    }
     const tareas = await prisma.tareaAsignada.findMany({
-      where: { fecha },
+      where: { fecha: fechaRango },
       include: {
         area: true,
         usuario: { select: { id: true, nombre: true, color: true } },
@@ -102,7 +106,7 @@ reportesRouter.get('/diario/:fecha', authMiddleware, soloCoordinadora, async (re
     }
 
     res.json({
-      fecha: format(fecha, 'dd/MM/yyyy'),
+      fecha: `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`,
       resumen: Object.values(porUsuario),
       totalTareas: tareas.length,
       completadas: tareas.filter(t => t.estado === 'completada').length,
@@ -116,8 +120,10 @@ reportesRouter.get('/diario/:fecha', authMiddleware, soloCoordinadora, async (re
 // Reporte semanal
 reportesRouter.get('/semanal/:inicio/:fin', authMiddleware, soloCoordinadora, async (req, res) => {
   try {
-    const inicio = startOfDay(new Date(req.params.inicio))
-    const fin = startOfDay(new Date(req.params.fin))
+    const [yi, mi, di] = req.params.inicio.split('-').map(Number)
+    const [yf, mf, df] = req.params.fin.split('-').map(Number)
+    const inicio = new Date(Date.UTC(yi, mi - 1, di, 0, 0, 0, 0))
+    const fin = new Date(Date.UTC(yf, mf - 1, df, 23, 59, 59, 999))
 
     const tareas = await prisma.tareaAsignada.findMany({
       where: { fecha: { gte: inicio, lte: fin } },

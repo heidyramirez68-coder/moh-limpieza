@@ -138,7 +138,11 @@ export default function DashboardEmpleada() {
                   <p className="text-xs text-slate-500">
                     <span className="font-bold text-blue-700">{g.cantidad} personas</span>
                     {' · '}{g.genero === 'H' ? 'Hombres' : g.genero === 'M' ? 'Mujeres' : 'Mixto'}
-                    {' · '}Sale {format(new Date(g.fechaSalida), "d 'de' MMM", { locale: es })}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-0.5">
+                    ✈️ Llegó {format(new Date(g.fechaLlegada), "d 'de' MMM", { locale: es })}
+                    {' · '}
+                    🏠 Sale {format(new Date(g.fechaSalida), "d 'de' MMM", { locale: es })}
                   </p>
                   {g.notas && <p className="text-xs text-amber-600 mt-0.5">📝 {g.notas}</p>}
                 </div>
