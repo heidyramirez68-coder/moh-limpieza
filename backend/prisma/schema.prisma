@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./moh_limpieza.db"
+}
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  rol          String   // "coordinadora" | "supervisora" | "empleada"
+  color        String
+  passwordHash String
+  primerLogin  Boolean  @default(true)
+  activo       Boolean  @default(true)
+  rolEspecial  String?  // "lavanderia" | "casas_staff" | null
+  creadoEn     DateTime @default(now())
+
+  tareas       TareaAsignada[]
+  badges       Badge[]
+  alertas      AlertaSuministro[]
+}
+
+model Area {
+  id              Int      @id @default(autoincrement())
+  nombre          String
+  tipo            String   // "dormitorio" | "casa_staff_americano" | "oficina" | "bano" | "lavanderia" | "comun" | "casa_evento" | "orange_house" | "casa_internos" | "warehouse"
+  subtipo         String?
+  activaPorEvento Boolean  @default(false)
+  activa          Boolean  @default(true)
+  horaFija        String?  // ej: "09:00" para casas del staff
+  diaSemana       Int?     // 1=Lunes ... 7=Domingo
+  orden           Int      @default(0)
+  notas           String?
+  editableJeidi   Boolean  @default(true)
+
+  checklistItems  ChecklistItem[]
+  tareas          TareaAsignada[]
+  playbook        PlaybookGrupo[]
+  alertas         AlertaSuministro[]
+}
+
+model ChecklistItem {
+  id          Int      @id @default(autoincrement())
+  areaId      Int
+  area        Area     @relation(fields: [areaId], references: [id])
+  descripcion String
+  orden       Int      @default(0)
+  activo      Boolean  @default(true)
+
+  completaciones ChecklistCompletacion[]
+}
+
+model TareaAsignada {
+  id             Int       @id @default(autoincrement())
+  fecha          DateTime
+  areaId         Int
+  area           Area      @relation(fields: [areaId], references: [id])
+  usuarioId      Int
+  usuario        Usuario   @relation(fields: [usuarioId], references: [id])
+  estado         String    @default("pendiente") // "pendiente" | "en_progreso" | "completada"
+  horaInicio     DateTime?
+  horaFin        DateTime?
+  minutosTotal   Int?      // calculado al completar
+  pasadoDeAyer   Boolean   @default(false)
+  fechaOriginal  DateTime? // si fue pasada de otro día
+  notas          String?
+  creadoEn       DateTime  @default(now())
+
+  checklistCompletaciones ChecklistCompletacion[]
+}
+
+model ChecklistCompletacion {
+  id              Int      @id @default(autoincrement())
+  tareaId         Int
+  tarea           TareaAsignada @relation(fields: [tareaId], references: [id])
+  checklistItemId Int
+  checklistItem   ChecklistItem @relation(fields: [checklistItemId], references: [id])
+  completadoEn    DateTime @default(now())
+  completadoPor   Int
+
+  @@unique([tareaId, checklistItemId])
+}
+
+model PlaybookGrupo {
+  id           Int      @id @default(autoincrement())
+  semanaInicio DateTime
+  semanaFin    DateTime
+  tipoSemana   String   // "sab_sab" | "mie_mie"
+  areaId       Int
+  area         Area     @relation(fields: [areaId], references: [id])
+  cantidad     Int
+  genero       String   // "H" | "M" | "Mixto"
+  fechaLlegada DateTime
+  fechaSalida  DateTime
+  notas        String?
+  creadoEn     DateTime @default(now())
+}
+
+model AlertaSuministro {
+  id           Int      @id @default(autoincrement())
+  areaId       Int
+  area         Area     @relation(fields: [areaId], references: [id])
+  descripcion  String
+  reportadoPor Int
+  reportador   Usuario  @relation(fields: [reportadoPor], references: [id])
+  resuelta     Boolean  @default(false)
+  resueltaEn   DateTime?
+  creadoEn     DateTime @default(now())
+}
+
+model Badge {
+  id          Int      @id @default(autoincrement())
+  usuarioId   Int
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id])
+  tipo        String   // "dia_perfecto" | "semana_completa" | "velocidad_record" | "equipo"
+  fecha       DateTime
+  otorgadoEn  DateTime @default(now())
+}
+
+model ConfigApp {
+  id    Int    @id @default(autoincrement())
+  clave String @unique
+  valor String
+}
