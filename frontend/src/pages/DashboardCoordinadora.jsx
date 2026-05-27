@@ -107,9 +107,15 @@ export default function DashboardCoordinadora() {
       </div>
 
       {/* ⏱ Ranking de velocidad */}
-      {ranking.length > 0 && (
-        <div className="card">
-          <h3 className="font-semibold text-slate-700 mb-3">⚡ Velocidad de hoy</h3>
+      <div className="card">
+        <h3 className="font-semibold text-slate-700 mb-3">⚡ Velocidad de hoy</h3>
+        {ranking.length === 0 ? (
+          <div className="text-center py-4">
+            <p className="text-2xl mb-1">⏳</p>
+            <p className="text-sm text-slate-500">Aún no hay datos de velocidad</p>
+            <p className="text-xs text-slate-400 mt-1">Las empleadas deben presionar <strong>"▶ Iniciar"</strong> al comenzar cada tarea</p>
+          </div>
+        ) : (
           <div className="space-y-2">
             {ranking.map((u, i) => {
               const medallas = ['🥇', '🥈', '🥉']
@@ -135,10 +141,10 @@ export default function DashboardCoordinadora() {
                 </div>
               )
             })}
+            <p className="text-xs text-slate-400 mt-2 text-center">* Solo tareas donde se presionó "Iniciar"</p>
           </div>
-          <p className="text-xs text-slate-400 mt-3 text-center">* Solo incluye tareas donde se presionó "Iniciar"</p>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Por empleada */}
       {cargando ? (
