@@ -150,7 +150,7 @@ export default function DashboardEmpleada() {
 
   // Mensajes especiales
   const esDiaCompleto = esDiaActivo && tareasDiaActivo.length > 0 && tareasActivas.length === 0
-  const esViernes = todayIndex === 4
+  const esViernes = todayIndex === 5 // Sábado = fin de semana
   const semanaCompleta = progresoSemana === 100 && todasTareas.length > 0
 
   if (cargando) return (
@@ -212,7 +212,7 @@ export default function DashboardEmpleada() {
       {esViernes && !semanaCompleta && todasTareas.length > 0 && (
         <div className="card border-2 border-violet-200 bg-violet-50 text-center py-3">
           <p className="text-2xl mb-1">🌟</p>
-          <p className="font-semibold text-violet-800 text-sm">¡Es viernes! ¡Casi terminamos la semana!</p>
+          <p className="font-semibold text-violet-800 text-sm">¡Es sábado! ¡Último día de la semana!</p>
           <p className="text-violet-600 text-xs mt-0.5">Gracias por tu esfuerzo toda la semana 💜</p>
         </div>
       )}
