@@ -1,33 +1,30 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { format } from 'date-fns'
+import { format, startOfWeek, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 
-const ESTADO_COLORES = {
-  pendiente: 'bg-amber-100 text-amber-700',
-  en_progreso: 'bg-blue-100 text-blue-700',
-  completada: 'bg-green-100 text-green-700',
-}
-
-const ESTADO_LABELS = {
-  pendiente: '⏳ Pendiente',
-  en_progreso: '🔄 En progreso',
-  completada: '✅ Completada',
-}
+const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 export default function DashboardEmpleada() {
   const { usuario } = useAuth()
-  const [tareas, setTareas] = useState([])
+  const [tareasSemana, setTareasSemana] = useState({}) // { 0: [...], 1: [...], ... }
   const [cargando, setCargando] = useState(true)
+  const [diaActivo, setDiaActivo] = useState(null)
   const [tareaAbierta, setTareaAbierta] = useState(null)
   const [badges, setBadges] = useState([])
   const [gruposHoy, setGruposHoy] = useState([])
+
   const hoy = new Date()
+  const semanaInicio = startOfWeek(hoy, { weekStartsOn: 1 })
+  const diasSemana = Array.from({ length: 7 }, (_, i) => addDays(semanaInicio, i))
+  // Índice del día actual (Lun=0 ... Dom=6)
+  const todayIndex = (hoy.getDay() + 6) % 7
 
   useEffect(() => {
-    cargarTareas()
+    setDiaActivo(todayIndex)
+    cargarSemana()
     cargarBadges()
     cargarGrupos()
   }, [])
@@ -39,33 +36,50 @@ export default function DashboardEmpleada() {
     } catch {}
   }
 
-  const cargarTareas = async () => {
+  const cargarSemana = async () => {
+    setCargando(true)
     try {
-      const fecha = format(hoy, 'yyyy-MM-dd')
-      const { data } = await axios.get(`/api/tareas/dia/${fecha}`)
-      setTareas(data)
+      const resultados = await Promise.all(
+        diasSemana.map(async (dia, i) => {
+          const fecha = format(dia, 'yyyy-MM-dd')
+          const { data } = await axios.get(`/api/tareas/dia/${fecha}`)
+          return [i, data]
+        })
+      )
+      setTareasSemana(Object.fromEntries(resultados))
     } catch { toast.error('Error cargando tareas') }
     finally { setCargando(false) }
   }
 
   const cargarBadges = async () => {
-    const { data } = await axios.get(`/api/usuarios/${usuario.id}/badges`)
-    setBadges(data.slice(0, 5))
+    try {
+      const { data } = await axios.get(`/api/usuarios/${usuario.id}/badges`)
+      setBadges(data.slice(0, 5))
+    } catch {}
   }
 
-  const iniciarTarea = async (tareaId) => {
+  // Actualizar una tarea dentro del día correcto
+  const actualizarTarea = (diaIndex, tareaActualizada) => {
+    setTareasSemana(prev => ({
+      ...prev,
+      [diaIndex]: (prev[diaIndex] || []).map(t =>
+        t.id === tareaActualizada.id ? tareaActualizada : t
+      )
+    }))
+    if (tareaAbierta?.id === tareaActualizada.id) setTareaAbierta(tareaActualizada)
+  }
+
+  const iniciarTarea = async (tareaId, diaIndex) => {
     try {
       const { data } = await axios.patch(`/api/tareas/${tareaId}/iniciar`)
-      setTareas(prev => prev.map(t => t.id === tareaId ? data : t))
-      if (tareaAbierta?.id === tareaId) setTareaAbierta(data)
+      actualizarTarea(diaIndex, data)
     } catch { toast.error('Error') }
   }
 
-  const toggleChecklist = async (tareaId, itemId, completado) => {
+  const toggleChecklist = async (tareaId, itemId, completado, diaIndex) => {
     try {
       const { data } = await axios.patch(`/api/tareas/${tareaId}/checklist/${itemId}`, { completado })
-      setTareas(prev => prev.map(t => t.id === tareaId ? data : t))
-      if (tareaAbierta?.id === tareaId) setTareaAbierta(data)
+      actualizarTarea(diaIndex, data)
       if (data.estado === 'completada') {
         toast.success('¡Área completada! 🎉')
         await cargarBadges()
@@ -73,18 +87,19 @@ export default function DashboardEmpleada() {
     } catch { toast.error('Error') }
   }
 
-  const reportarSuministro = async (tareaId, areaId, areaNombre) => {
+  const reportarSuministro = async (areaId, areaNombre) => {
     const descripcion = prompt(`¿Qué falta en ${areaNombre}?`)
     if (!descripcion) return
     try {
       await axios.post('/api/alertas', { areaId, descripcion })
-      toast.success('Alerta enviada a Jeidi y Erika ✓')
+      toast.success('Alerta enviada ✓')
     } catch { toast.error('Error enviando alerta') }
   }
 
-  const tareasPendientes = tareas.filter(t => t.estado !== 'completada')
-  const tareasCompletadas = tareas.filter(t => t.estado === 'completada')
-  const progreso = tareas.length > 0 ? Math.round((tareasCompletadas.length / tareas.length) * 100) : 0
+  // Estadísticas semanales
+  const todasTareas = Object.values(tareasSemana).flat()
+  const completadasSemana = todasTareas.filter(t => t.estado === 'completada').length
+  const progresoSemana = todasTareas.length > 0 ? Math.round((completadasSemana / todasTareas.length) * 100) : 0
 
   const BADGE_INFO = {
     dia_perfecto: { icon: '🌟', label: 'Día perfecto' },
@@ -93,6 +108,11 @@ export default function DashboardEmpleada() {
     equipo: { icon: '🤝', label: 'Trabajo en equipo' },
   }
 
+  const tareasDiaActivo = tareasSemana[diaActivo] || []
+  const tareasActivas = tareasDiaActivo.filter(t => t.estado !== 'completada')
+  const tareasCompletadasDia = tareasDiaActivo.filter(t => t.estado === 'completada')
+  const esDiaActivo = diaActivo === todayIndex
+
   if (cargando) return (
     <div className="flex items-center justify-center py-20">
       <div className="animate-spin w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full" />
@@ -100,27 +120,33 @@ export default function DashboardEmpleada() {
   )
 
   return (
-    <div className="space-y-5">
-      {/* Saludo */}
+    <div className="space-y-4">
+
+      {/* Saludo + progreso semanal */}
       <div className="card" style={{ borderLeft: `4px solid ${usuario.color}` }}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-bold text-xl text-slate-800">¡Buenos días, {usuario.nombre.split(' ')[0]}! 👋</h2>
-            <p className="text-slate-500 text-sm mt-0.5 capitalize">{format(hoy, "EEEE d 'de' MMMM", { locale: es })}</p>
+            <h2 className="font-bold text-xl text-slate-800">
+              ¡Buenos días, {usuario.nombre.split(' ')[0]}! 👋
+            </h2>
+            <p className="text-slate-500 text-sm mt-0.5 capitalize">
+              {format(hoy, "EEEE d 'de' MMMM", { locale: es })}
+            </p>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-bold" style={{ color: usuario.color }}>{progreso}%</p>
-            <p className="text-xs text-slate-400">completado</p>
+            <p className="text-3xl font-bold" style={{ color: usuario.color }}>{progresoSemana}%</p>
+            <p className="text-xs text-slate-400">esta semana</p>
           </div>
         </div>
-        {/* Barra de progreso */}
         <div className="mt-3 bg-slate-100 rounded-full h-2">
           <div
             className="h-2 rounded-full transition-all duration-500"
-            style={{ width: `${progreso}%`, backgroundColor: usuario.color }}
+            style={{ width: `${progresoSemana}%`, backgroundColor: usuario.color }}
           />
         </div>
-        <p className="text-xs text-slate-400 mt-1">{tareasCompletadas.length} de {tareas.length} tareas completadas</p>
+        <p className="text-xs text-slate-400 mt-1">
+          {completadasSemana} de {todasTareas.length} tareas completadas esta semana
+        </p>
       </div>
 
       {/* Grupos activos hoy */}
@@ -152,7 +178,7 @@ export default function DashboardEmpleada() {
         </div>
       )}
 
-      {/* Módulo especial: Lavandería (Yakira) */}
+      {/* Módulo lavandería */}
       {usuario.rolEspecial === 'lavanderia' && (
         <div className="card border-2 border-emerald-200 bg-emerald-50">
           <h3 className="font-semibold text-emerald-800 mb-3">🧺 Módulo de Lavandería</h3>
@@ -160,26 +186,20 @@ export default function DashboardEmpleada() {
             <button
               onClick={async () => { await axios.post('/api/alertas', { areaId: 1, descripcion: 'Lavandería al día ✅' }); toast.success('Estado actualizado') }}
               className="bg-emerald-600 text-white rounded-xl py-2 text-sm font-medium"
-            >
-              ✅ Lavandería al día
-            </button>
+            >✅ Lavandería al día</button>
             <button
               onClick={async () => { await axios.post('/api/alertas', { areaId: 1, descripcion: '⚠️ Lavandería saturada' }); toast.success('Jeidi y Erika notificadas') }}
               className="bg-amber-500 text-white rounded-xl py-2 text-sm font-medium"
-            >
-              ⚠️ Lavandería saturada
-            </button>
+            >⚠️ Lavandería saturada</button>
           </div>
           <button
-            onClick={async () => { await axios.post('/api/alertas', { areaId: 1, descripcion: '🙋 Yakira disponible para apoyar al equipo' }); toast.success('¡Notificado! Jeidi asignará tareas') }}
+            onClick={async () => { await axios.post('/api/alertas', { areaId: 1, descripcion: '🙋 Yakira disponible para apoyar al equipo' }); toast.success('¡Notificado!') }}
             className="w-full bg-white border-2 border-emerald-300 text-emerald-700 rounded-xl py-2 text-sm font-semibold"
-          >
-            🙋 Disponible para apoyar
-          </button>
+          >🙋 Disponible para apoyar</button>
         </div>
       )}
 
-      {/* Badges recientes */}
+      {/* Badges */}
       {badges.length > 0 && (
         <div className="card">
           <h3 className="font-semibold text-slate-700 text-sm mb-2">🏅 Mis reconocimientos</h3>
@@ -193,53 +213,102 @@ export default function DashboardEmpleada() {
         </div>
       )}
 
-      {/* Tareas pendientes */}
-      {tareasPendientes.length > 0 && (
-        <div>
-          <h3 className="font-semibold text-slate-700 mb-3">📋 Mis tareas de hoy</h3>
-          <div className="space-y-3">
-            {tareasPendientes.map(tarea => (
-              <TarjetaTarea
-                key={tarea.id}
-                tarea={tarea}
-                abierta={tareaAbierta?.id === tarea.id}
-                onAbrir={() => setTareaAbierta(tareaAbierta?.id === tarea.id ? null : tarea)}
-                onIniciar={() => iniciarTarea(tarea.id)}
-                onToggle={toggleChecklist}
-                onReportar={reportarSuministro}
-                colorUsuario={usuario.color}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {/* ─── Pestañas de días ─────────────────────────────────── */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+        {diasSemana.map((dia, i) => {
+          const tareasDia = tareasSemana[i] || []
+          const completadas = tareasDia.filter(t => t.estado === 'completada').length
+          const pendientes = tareasDia.filter(t => t.estado !== 'completada').length
+          const esHoy = i === todayIndex
+          const activo = i === diaActivo
+          return (
+            <button
+              key={i}
+              onClick={() => { setDiaActivo(i); setTareaAbierta(null) }}
+              className={`flex-shrink-0 flex flex-col items-center px-3 py-2 rounded-xl transition-all min-w-[52px] ${
+                activo
+                  ? 'text-white shadow-md'
+                  : esHoy
+                    ? 'bg-violet-50 text-violet-700 border-2 border-violet-300'
+                    : 'bg-slate-100 text-slate-500'
+              }`}
+              style={activo ? { backgroundColor: usuario.color } : {}}
+            >
+              <span className="text-xs font-medium">{DIAS_CORTOS[i]}</span>
+              <span className={`text-base font-bold ${esHoy && !activo ? 'text-violet-700' : ''}`}>
+                {format(dia, 'd')}
+              </span>
+              {tareasDia.length > 0 ? (
+                <span className={`text-xs mt-0.5 font-medium ${activo ? 'text-white/80' : completadas === tareasDia.length ? 'text-green-600' : 'text-amber-500'}`}>
+                  {completadas === tareasDia.length ? '✅' : `${pendientes}⏳`}
+                </span>
+              ) : (
+                <span className="text-xs mt-0.5 text-slate-300">—</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
 
-      {/* Tareas completadas */}
-      {tareasCompletadas.length > 0 && (
-        <div>
-          <h3 className="font-semibold text-slate-700 mb-3">✅ Completadas hoy</h3>
-          <div className="space-y-2">
-            {tareasCompletadas.map(tarea => (
-              <div key={tarea.id} className="card flex items-center gap-3 opacity-70">
-                <span className="text-green-500 text-xl">✅</span>
-                <div className="flex-1">
-                  <p className="font-medium text-slate-700 text-sm">{tarea.area.nombre}</p>
-                  {tarea.minutosTotal && <p className="text-xs text-slate-400">Tiempo: {tarea.minutosTotal} min</p>}
-                </div>
-                {tarea.pasadoDeAyer && <span className="badge bg-amber-100 text-amber-700 text-xs">De ayer</span>}
+      {/* ─── Tareas del día seleccionado ──────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-slate-700 capitalize">
+            {format(diasSemana[diaActivo] || hoy, "EEEE d 'de' MMMM", { locale: es })}
+            {esDiaActivo && <span className="ml-2 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">Hoy</span>}
+          </h3>
+          <button onClick={cargarSemana} className="text-xs text-slate-400 hover:text-slate-600">🔄</button>
+        </div>
+
+        {tareasDiaActivo.length === 0 ? (
+          <div className="card text-center py-10 text-slate-400">
+            <p className="text-3xl mb-2">{esDiaActivo ? '🌟' : '📅'}</p>
+            <p className="font-medium">
+              {esDiaActivo ? 'No tienes tareas asignadas hoy' : 'Sin tareas este día'}
+            </p>
+            {esDiaActivo && <p className="text-sm mt-1">¡Que sea un buen día!</p>}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Pendientes / en progreso */}
+            {tareasActivas.length > 0 && (
+              <div className="space-y-3">
+                {tareasActivas.map(tarea => (
+                  <TarjetaTarea
+                    key={tarea.id}
+                    tarea={tarea}
+                    abierta={tareaAbierta?.id === tarea.id}
+                    onAbrir={() => setTareaAbierta(tareaAbierta?.id === tarea.id ? null : tarea)}
+                    onIniciar={() => iniciarTarea(tarea.id, diaActivo)}
+                    onToggle={(tareaId, itemId, completado) => toggleChecklist(tareaId, itemId, completado, diaActivo)}
+                    onReportar={(areaId, areaNombre) => reportarSuministro(areaId, areaNombre)}
+                    colorUsuario={usuario.color}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
 
-      {tareas.length === 0 && (
-        <div className="text-center py-16 text-slate-400">
-          <p className="text-4xl mb-3">🌟</p>
-          <p className="font-medium">No tienes tareas asignadas hoy</p>
-          <p className="text-sm mt-1">¡Que sea un buen día!</p>
-        </div>
-      )}
+            {/* Completadas */}
+            {tareasCompletadasDia.length > 0 && (
+              <div>
+                <p className="text-xs text-slate-400 font-medium mb-2 uppercase tracking-wide">✅ Completadas</p>
+                <div className="space-y-2">
+                  {tareasCompletadasDia.map(tarea => (
+                    <div key={tarea.id} className="card flex items-center gap-3 opacity-70 bg-green-50 border border-green-100">
+                      <span className="text-green-500 text-xl">✅</span>
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-700 text-sm">{tarea.area.nombre}</p>
+                        {tarea.minutosTotal && <p className="text-xs text-slate-400">⏱ {tarea.minutosTotal} min</p>}
+                      </div>
+                      {tarea.pasadoDeAyer && <span className="badge bg-amber-100 text-amber-700 text-xs">De ayer</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -251,7 +320,6 @@ function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar
 
   return (
     <div className="card border border-slate-200">
-      {/* Header */}
       <div className="flex items-center gap-3 cursor-pointer" onClick={onAbrir}>
         <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center text-lg flex-shrink-0">
           {tarea.area.tipo === 'dormitorio' ? '🛏️'
@@ -260,13 +328,13 @@ function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar
             : tarea.area.tipo === 'casa_staff_americano' ? '🏠'
             : tarea.area.tipo === 'orange_house' ? '🟠'
             : tarea.area.tipo === 'lavanderia' ? '🧺'
+            : tarea.area.tipo === 'casa_evento' ? '🎪'
             : '📍'}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-slate-800 text-sm truncate">{tarea.area.nombre}</p>
           {tarea.area.horaFija && <p className="text-xs text-violet-600">🕐 {tarea.area.horaFija}</p>}
           {tarea.pasadoDeAyer && <span className="badge bg-amber-100 text-amber-700 text-xs">📅 De ayer</span>}
-          {/* Mini progreso */}
           {totalItems > 0 && (
             <div className="flex items-center gap-2 mt-1">
               <div className="flex-1 bg-slate-100 rounded-full h-1.5">
@@ -276,10 +344,12 @@ function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar
             </div>
           )}
         </div>
-        <span className="text-slate-400 text-sm">{abierta ? '▲' : '▼'}</span>
+        <div className="flex flex-col items-end gap-1">
+          {tarea.estado === 'en_progreso' && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">En progreso</span>}
+          <span className="text-slate-400 text-sm">{abierta ? '▲' : '▼'}</span>
+        </div>
       </div>
 
-      {/* Expandido: checklist */}
       {abierta && (
         <div className="mt-4 pt-4 border-t border-slate-100">
           {tarea.estado === 'pendiente' && (
@@ -287,14 +357,11 @@ function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar
               ▶ Iniciar tarea
             </button>
           )}
-
           {tarea.area.notas && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-amber-800">
               📝 {tarea.area.notas}
             </div>
           )}
-
-          {/* Checklist */}
           <div className="space-y-2">
             {tarea.area.checklistItems?.map(item => {
               const completado = completaciones.some(c => c.checklistItemId === item.id)
@@ -314,10 +381,8 @@ function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar
               )
             })}
           </div>
-
-          {/* Botón suministro faltante */}
           <button
-            onClick={() => onReportar(tarea.id, tarea.areaId, tarea.area.nombre)}
+            onClick={() => onReportar(tarea.areaId, tarea.area.nombre)}
             className="w-full mt-3 border border-red-200 text-red-600 bg-red-50 rounded-xl py-2 text-xs font-medium hover:bg-red-100"
           >
             ⚠️ Reportar suministro faltante

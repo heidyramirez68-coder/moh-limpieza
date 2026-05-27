@@ -8,13 +8,15 @@ import toast from 'react-hot-toast'
 export function PlaybookPage() {
   const [grupos, setGrupos] = useState([])
   const [areas, setAreas] = useState([])
-  const [semanaInicio] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }))
+  const [semanaInicio, setSemanaInicio] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }))
+  const semanaActual = startOfWeek(new Date(), { weekStartsOn: 1 })
+  const esEstaSemana = semanaInicio.getTime() === semanaActual.getTime()
   const [form, setForm] = useState({ areaId: '', cantidad: '', genero: 'Mixto', fechaLlegada: '', fechaSalida: '', notas: '' })
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
   const [formEdit, setFormEdit] = useState({})
 
-  useEffect(() => { cargarDatos() }, [])
+  useEffect(() => { cargarDatos() }, [semanaInicio])
 
   const cargarDatos = async () => {
     const [gruposRes, areasRes] = await Promise.all([
@@ -83,14 +85,34 @@ export function PlaybookPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      {/* Header con navegación de semanas */}
+      <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Playbook Semanal</h2>
           <p className="text-slate-500 text-sm">
             {format(semanaInicio, "d MMM", { locale: es })} — {format(addDays(semanaInicio, 6), "d MMM yyyy", { locale: es })}
+            {esEstaSemana && <span className="ml-2 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">Esta semana</span>}
           </p>
         </div>
-        <button onClick={() => setMostrarForm(true)} className="btn-primary">+ Agregar grupo</button>
+        <button onClick={() => setMostrarForm(true)} className="btn-primary flex-shrink-0">+ Agregar grupo</button>
+      </div>
+
+      {/* Navegación de semanas */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setSemanaInicio(prev => addDays(prev, -7))}
+          className="flex-shrink-0 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 active:bg-slate-100"
+        >◀ Anterior</button>
+        {!esEstaSemana && (
+          <button
+            onClick={() => setSemanaInicio(semanaActual)}
+            className="flex-1 border border-violet-200 rounded-xl px-3 py-2 text-sm font-medium text-violet-600 bg-violet-50"
+          >Semana actual</button>
+        )}
+        <button
+          onClick={() => setSemanaInicio(prev => addDays(prev, 7))}
+          className="flex-shrink-0 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 active:bg-slate-100"
+        >Siguiente ▶</button>
       </div>
 
       {/* Form */}
