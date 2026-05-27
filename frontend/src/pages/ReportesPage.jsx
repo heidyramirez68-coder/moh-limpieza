@@ -82,21 +82,61 @@ export default function ReportesPage() {
         if (y > 250) { doc.addPage(); y = 20 }
       }
     } else if (tipo === 'semanal' && reporte.estadisticas) {
-      const rows = reporte.estadisticas.map(e => [
+      // Resumen por empleada
+      const rows = reporte.estadisticas.filter(e => e.totalTareas > 0).map(e => [
         e.usuario.nombre,
         e.totalTareas,
         e.completadas,
         e.pendientes,
-        `${e.promedioMinPorTarea} min`,
+        e.promedioMinPorTarea > 0 ? `${e.promedioMinPorTarea} min` : '—',
         `${e.eficiencia}%`
       ])
       autoTable(doc, {
         startY: 80,
-        head: [['Empleada', 'Total', 'Completadas', 'Pendientes', 'Promedio/tarea', 'Eficiencia']],
+        head: [['Empleada', 'Total', 'Completadas', 'Pendientes', 'Prom/tarea', 'Eficiencia']],
         body: rows,
         margin: { left: 20 },
         headStyles: { fillColor: [124, 58, 237] }
       })
+
+      // Ranking de velocidad
+      if (reporte.ranking?.length > 0) {
+        let y = doc.lastAutoTable.finalY + 12
+        doc.setFontSize(13); doc.setFont(undefined, 'bold')
+        doc.text('⚡ Ranking de Velocidad', 20, y)
+        doc.setFont(undefined, 'normal')
+        const medals = ['🥇', '🥈', '🥉']
+        const rankRows = reporte.ranking.map((e, i) => [
+          `${medals[i] || (i+1)+'.'} ${e.usuario.nombre}`,
+          `${e.promedioMinPorTarea} min/tarea`,
+          `${e.completadas} tareas`,
+          `${e.minutosTotal} min total`
+        ])
+        autoTable(doc, {
+          startY: y + 5,
+          head: [['Empleada', 'Promedio', 'Tareas', 'Tiempo total']],
+          body: rankRows,
+          margin: { left: 20 },
+          headStyles: { fillColor: [5, 150, 105] }
+        })
+      }
+
+      // Tareas pendientes
+      if (reporte.pendientesList?.length > 0) {
+        let y2 = doc.lastAutoTable.finalY + 12
+        if (y2 > 250) { doc.addPage(); y2 = 20 }
+        doc.setFontSize(13); doc.setFont(undefined, 'bold')
+        doc.text('⚠️ Tareas Pendientes', 20, y2)
+        doc.setFont(undefined, 'normal')
+        const pendRows = reporte.pendientesList.map(p => [p.fecha, p.area, p.usuario.nombre, p.estado === 'en_progreso' ? 'En progreso' : 'Pendiente'])
+        autoTable(doc, {
+          startY: y2 + 5,
+          head: [['Día', 'Área', 'Empleada', 'Estado']],
+          body: pendRows,
+          margin: { left: 20 },
+          headStyles: { fillColor: [217, 119, 6] }
+        })
+      }
     }
 
     doc.save(`MOH_Reporte_${tipo}_${fecha}.pdf`)
@@ -151,25 +191,93 @@ export default function ReportesPage() {
             </div>
           </div>
 
-          {/* Por empleada (semanal) */}
-          {tipo === 'semanal' && reporte.estadisticas?.map(e => (
-            <div key={e.usuario.id} className="card">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: e.usuario.color }}>
-                  {e.usuario.nombre.charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-800">{e.usuario.nombre}</p>
-                  <p className="text-xs text-slate-500">Eficiencia: <span className="font-bold text-violet-600">{e.eficiencia}%</span></p>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="bg-green-50 rounded-lg p-2"><p className="font-bold text-green-600">{e.completadas}</p><p className="text-slate-500">Completadas</p></div>
-                <div className="bg-amber-50 rounded-lg p-2"><p className="font-bold text-amber-600">{e.pendientes}</p><p className="text-slate-500">Pendientes</p></div>
-                <div className="bg-violet-50 rounded-lg p-2"><p className="font-bold text-violet-600">{e.promedioMinPorTarea}min</p><p className="text-slate-500">Prom/tarea</p></div>
+          {/* SEMANAL — Ranking de velocidad */}
+          {tipo === 'semanal' && reporte.ranking?.length > 0 && (
+            <div className="card">
+              <h3 className="font-semibold text-slate-700 mb-3">⚡ Ranking de velocidad</h3>
+              <div className="space-y-2">
+                {reporte.ranking.map((e, i) => {
+                  const medals = ['🥇', '🥈', '🥉']
+                  const max = reporte.ranking[reporte.ranking.length - 1].promedioMinPorTarea
+                  return (
+                    <div key={e.usuario.id} className="flex items-center gap-3">
+                      <span className="text-lg w-7 text-center">{medals[i] || `${i+1}.`}</span>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: e.usuario.color }}>
+                        {e.usuario.nombre.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between mb-0.5">
+                          <span className="text-sm font-medium text-slate-700">{e.usuario.nombre.split(' ')[0]}</span>
+                          <span className="text-xs font-bold text-violet-700">{e.promedioMinPorTarea} min/tarea</span>
+                        </div>
+                        <div className="bg-slate-100 rounded-full h-2">
+                          <div className="h-2 rounded-full" style={{ width: `${Math.round((e.promedioMinPorTarea/max)*100)}%`, backgroundColor: e.usuario.color }} />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">{e.completadas} tareas · {e.minutosTotal} min total</p>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
-          ))}
+          )}
+
+          {/* SEMANAL — Por empleada */}
+          {tipo === 'semanal' && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-700">👩 Por empleada</h3>
+              {reporte.estadisticas?.filter(e => e.totalTareas > 0).map(e => (
+                <div key={e.usuario.id} className="card">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: e.usuario.color }}>
+                      {e.usuario.nombre.charAt(0)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-slate-800">{e.usuario.nombre}</p>
+                      <p className="text-xs text-slate-500">Eficiencia: <span className="font-bold text-violet-600">{e.eficiencia}%</span></p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-green-50 rounded-lg p-2"><p className="font-bold text-green-600">{e.completadas}</p><p className="text-slate-500">Completadas</p></div>
+                    <div className="bg-amber-50 rounded-lg p-2"><p className="font-bold text-amber-600">{e.pendientes}</p><p className="text-slate-500">Pendientes</p></div>
+                    <div className="bg-violet-50 rounded-lg p-2"><p className="font-bold text-violet-600">{e.promedioMinPorTarea > 0 ? `${e.promedioMinPorTarea}min` : '—'}</p><p className="text-slate-500">Prom/tarea</p></div>
+                  </div>
+                  {/* Tareas de esta empleada */}
+                  {reporte.detalle?.filter(t => t.usuario.id === e.usuario.id).length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {reporte.detalle.filter(t => t.usuario.id === e.usuario.id).map(t => (
+                        <div key={t.id} className="flex items-center gap-2 text-xs text-slate-500">
+                          <span>{t.estado === 'completada' ? '✅' : t.estado === 'en_progreso' ? '🔄' : '⏳'}</span>
+                          <span className="text-slate-400 w-12 flex-shrink-0">{t.fecha}</span>
+                          <span className="flex-1 truncate">{t.area}</span>
+                          {t.minutosTotal && <span className="text-slate-400">{t.minutosTotal}min</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* SEMANAL — Pendientes */}
+          {tipo === 'semanal' && reporte.pendientesList?.length > 0 && (
+            <div className="card border-2 border-amber-200 bg-amber-50">
+              <h3 className="font-semibold text-amber-800 mb-2">⚠️ Tareas pendientes ({reporte.pendientesList.length})</h3>
+              <div className="space-y-1.5">
+                {reporte.pendientesList.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm bg-white rounded-lg px-3 py-2">
+                    <span>{p.estado === 'en_progreso' ? '🔄' : '⏳'}</span>
+                    <span className="text-slate-400 text-xs w-12 flex-shrink-0">{p.fecha}</span>
+                    <span className="flex-1 text-slate-700 truncate">{p.area}</span>
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: p.usuario.color }}>
+                      {p.usuario.nombre.charAt(0)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Por empleada (diario) */}
           {tipo === 'diario' && reporte.resumen?.map(r => (

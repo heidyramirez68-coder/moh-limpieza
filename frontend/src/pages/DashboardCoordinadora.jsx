@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import toast from 'react-hot-toast'
+import { io } from 'socket.io-client'
 
 export default function DashboardCoordinadora() {
   const [resumen, setResumen] = useState([])
@@ -12,6 +13,28 @@ export default function DashboardCoordinadora() {
   const hoy = new Date()
 
   useEffect(() => { cargarDatos() }, [fechaVista])
+
+  // Notificaciones en tiempo real
+  useEffect(() => {
+    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001', { transports: ['websocket', 'polling'] })
+    socket.emit('join_room', 'coordinadora')
+
+    socket.on('area_completada', ({ tarea, mensaje }) => {
+      toast.success(mensaje || `✅ Área completada`, {
+        duration: 8000,
+        style: { background: '#065f46', color: '#fff', fontWeight: '600', maxWidth: '350px' }
+      })
+      // Refrescar datos si estamos viendo hoy
+      const hoyStr = format(new Date(), 'yyyy-MM-dd')
+      if (fechaVista === hoyStr) cargarDatos()
+    })
+
+    socket.on('nueva_alerta', () => {
+      cargarDatos()
+    })
+
+    return () => socket.disconnect()
+  }, [fechaVista])
 
   const cargarDatos = async () => {
     setCargando(true)

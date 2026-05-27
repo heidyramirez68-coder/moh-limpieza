@@ -154,9 +154,38 @@ reportesRouter.get('/semanal/:inicio/:fin', authMiddleware, soloCoordinadora, as
       }
     })
 
+    // Ranking de velocidad (solo con tiempo grabado)
+    const ranking = estadisticas
+      .filter(e => e.promedioMinPorTarea > 0)
+      .sort((a, b) => a.promedioMinPorTarea - b.promedioMinPorTarea)
+
+    // Detalle de todas las tareas
+    const detalle = tareas.map(t => ({
+      id: t.id,
+      fecha: format(new Date(t.fecha), "EEE d/M", { locale: es }),
+      area: t.area.nombre,
+      tipoArea: t.area.tipo,
+      usuario: t.usuario,
+      estado: t.estado,
+      minutosTotal: t.minutosTotal,
+    }))
+
+    // Pendientes con detalle
+    const pendientesList = tareas
+      .filter(t => t.estado !== 'completada')
+      .map(t => ({
+        area: t.area.nombre,
+        usuario: t.usuario,
+        fecha: format(new Date(t.fecha), "EEE d/M", { locale: es }),
+        estado: t.estado,
+      }))
+
     res.json({
       semana: `${format(inicio, 'dd/MM/yyyy')} — ${format(fin, 'dd/MM/yyyy')}`,
       estadisticas,
+      ranking,
+      detalle,
+      pendientesList,
       totalTareas: tareas.length,
       completadas: tareas.filter(t => t.estado === 'completada').length,
     })
