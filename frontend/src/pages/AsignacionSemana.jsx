@@ -229,19 +229,29 @@ export default function AsignacionSemana() {
                 {/* Asignar empleadas */}
                 <div className="flex gap-1.5 flex-wrap">
                   {usuarios.map(u => {
-                    const yaAsignada = tareasArea.some(t => t.usuarioId === u.id)
+                    const tareaDeUsuario = tareasArea.find(t => t.usuarioId === u.id)
+                    const yaAsignada = !!tareaDeUsuario
                     const maxAlcanzado = tareasArea.length >= 3
                     return (
                       <button
                         key={u.id}
-                        onClick={() => !yaAsignada && !maxAlcanzado && asignarTarea(area.id, u.id, filtroDia)}
-                        disabled={yaAsignada || (maxAlcanzado && !yaAsignada)}
+                        onClick={() => {
+                          if (yaAsignada) {
+                            eliminarTarea(tareaDeUsuario.id, filtroDia, area.nombre, u.nombre)
+                          } else if (!maxAlcanzado) {
+                            asignarTarea(area.id, u.id, filtroDia)
+                          }
+                        }}
+                        disabled={!yaAsignada && maxAlcanzado}
+                        title={yaAsignada ? 'Clic para quitar' : 'Clic para asignar'}
                         className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
-                          yaAsignada ? 'text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40'
+                          yaAsignada
+                            ? 'text-white hover:opacity-75 active:opacity-60'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40'
                         }`}
-                        style={yaAsignada ? { backgroundColor: u.color, color: 'white' } : {}}
+                        style={yaAsignada ? { backgroundColor: u.color } : {}}
                       >
-                        {yaAsignada ? '✓ ' : ''}{u.nombre.split(' ')[0]}
+                        {yaAsignada ? `✓ ${u.nombre.split(' ')[0]}` : u.nombre.split(' ')[0]}
                       </button>
                     )
                   })}
