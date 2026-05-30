@@ -4,8 +4,10 @@ import axios from 'axios'
 import { format, startOfWeek, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import toast from 'react-hot-toast'
+import { useSemana } from '../context/SemanaContext'
 
 export function PlaybookPage() {
+  const { setSemanaVista } = useSemana()
   const [grupos, setGrupos] = useState([])
   const [areas, setAreas] = useState([])
   const [semanaInicio, setSemanaInicio] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }))
@@ -16,7 +18,10 @@ export function PlaybookPage() {
   const [editandoId, setEditandoId] = useState(null)
   const [formEdit, setFormEdit] = useState({})
 
-  useEffect(() => { cargarDatos() }, [semanaInicio])
+  useEffect(() => {
+    setSemanaVista(semanaInicio)
+    cargarDatos()
+  }, [semanaInicio])
 
   const cargarDatos = async () => {
     const [gruposRes, areasRes] = await Promise.all([

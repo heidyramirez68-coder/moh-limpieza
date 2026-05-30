@@ -12,6 +12,7 @@ const playbookRoutes = require('./routes/playbook')
 const reportesRoutes = require('./routes/reportes')
 const configRoutes = require('./routes/config')
 const alertasRoutes = require('./routes/alertas')
+const pushRoutes = require('./routes/push')
 
 const app = express()
 const httpServer = createServer(app)
@@ -38,6 +39,7 @@ app.use('/api/playbook', playbookRoutes)
 app.use('/api/reportes', reportesRoutes)
 app.use('/api/config', configRoutes)
 app.use('/api/alertas', alertasRoutes)
+app.use('/api/push', pushRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {

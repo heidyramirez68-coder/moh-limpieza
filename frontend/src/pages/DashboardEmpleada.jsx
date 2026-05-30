@@ -131,6 +131,14 @@ export default function DashboardEmpleada() {
     } catch { toast.error('Error enviando alerta') }
   }
 
+  const guardarComentario = async (tareaId, comentario) => {
+    try {
+      const { data } = await axios.patch(`/api/tareas/${tareaId}/comentario`, { comentario })
+      actualizarTarea(diaActivo, data)
+      toast.success('Nota guardada ✓')
+    } catch { toast.error('Error guardando nota') }
+  }
+
   // Estadísticas semanales
   const todasTareas = Object.values(tareasSemana).flat()
   const completadasSemana = todasTareas.filter(t => t.estado === 'completada').length
@@ -350,6 +358,7 @@ export default function DashboardEmpleada() {
                     onIniciar={() => iniciarTarea(tarea.id, diaActivo)}
                     onToggle={(tareaId, itemId, completado) => toggleChecklist(tareaId, itemId, completado, diaActivo)}
                     onReportar={(areaId, areaNombre) => reportarSuministro(areaId, areaNombre)}
+                    onComentario={guardarComentario}
                     colorUsuario={usuario.color}
                   />
                 ))}
@@ -381,28 +390,42 @@ export default function DashboardEmpleada() {
   )
 }
 
-function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar, colorUsuario }) {
+function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar, onComentario, colorUsuario }) {
   const completaciones = tarea.checklistCompletaciones || []
   const totalItems = tarea.area.checklistItems?.length || 0
   const progreso = totalItems > 0 ? Math.round((completaciones.length / totalItems) * 100) : 0
+  const [comentarioTexto, setComentarioTexto] = useState(tarea.comentario || '')
+  const [guardandoComentario, setGuardandoComentario] = useState(false)
+  const [mostrarComentario, setMostrarComentario] = useState(false)
+
+  const guardarComentario = async () => {
+    if (!comentarioTexto.trim()) return
+    setGuardandoComentario(true)
+    await onComentario(tarea.id, comentarioTexto)
+    setGuardandoComentario(false)
+    setMostrarComentario(false)
+  }
+
+  const ICONO = {
+    dormitorio: '🛏️', oficina: '🏢', bano: '🚿',
+    casa_staff_americano: '🏠', orange_house: '🟠',
+    lavanderia: '🧺', casa_evento: '🎪', warehouse: '📦',
+    comun: '🏛️', casa_internos: '🏘️'
+  }
 
   return (
     <div className="card border border-slate-200">
       <div className="flex items-center gap-3 cursor-pointer" onClick={onAbrir}>
         <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center text-lg flex-shrink-0">
-          {tarea.area.tipo === 'dormitorio' ? '🛏️'
-            : tarea.area.tipo === 'oficina' ? '🏢'
-            : tarea.area.tipo === 'bano' ? '🚿'
-            : tarea.area.tipo === 'casa_staff_americano' ? '🏠'
-            : tarea.area.tipo === 'orange_house' ? '🟠'
-            : tarea.area.tipo === 'lavanderia' ? '🧺'
-            : tarea.area.tipo === 'casa_evento' ? '🎪'
-            : '📍'}
+          {ICONO[tarea.area.tipo] || '📍'}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-slate-800 text-sm truncate">{tarea.area.nombre}</p>
           {tarea.area.horaFija && <p className="text-xs text-violet-600">🕐 {tarea.area.horaFija}</p>}
           {tarea.pasadoDeAyer && <span className="badge bg-amber-100 text-amber-700 text-xs">📅 De ayer</span>}
+          {tarea.comentario && (
+            <p className="text-xs text-amber-700 mt-0.5 truncate">💬 {tarea.comentario}</p>
+          )}
           {totalItems > 0 && (
             <div className="flex items-center gap-2 mt-1">
               <div className="flex-1 bg-slate-100 rounded-full h-1.5">
@@ -419,26 +442,55 @@ function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar
       </div>
 
       {abierta && (
-        <div className="mt-4 pt-4 border-t border-slate-100">
+        <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
           {tarea.estado === 'pendiente' && (
-            <button onClick={onIniciar} className="w-full bg-blue-600 text-white rounded-xl py-2 text-sm font-medium mb-3">
+            <button onClick={onIniciar} className="w-full bg-blue-600 text-white rounded-xl py-2 text-sm font-medium">
               ▶ Iniciar tarea
             </button>
           )}
+
+          {tarea.notaVerif && !tarea.verificada && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+              ↩ <strong>Erika:</strong> {tarea.notaVerif}
+            </div>
+          )}
+
           {tarea.area.notas && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-amber-800">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
               📝 {tarea.area.notas}
             </div>
           )}
+
+          {/* Checklist especial si hay grupos hospedados */}
+          {tarea.tieneGrupoHospedado && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-2">
+              <p className="text-xs font-bold text-blue-800 mb-1">🏨 Hay grupos hospedados — checklist especial</p>
+              <p className="text-xs text-blue-600">Usa esta lista para el mantenimiento diario mientras el grupo está</p>
+            </div>
+          )}
+
+          {/* Checklist */}
+          {tarea.checklistFiltro && !tarea.tieneGrupoHospedado && (
+            <div className="bg-violet-50 border border-violet-200 rounded-xl p-2.5 text-xs text-violet-700 font-medium">
+              ✂️ Solo tus ítems asignados ({JSON.parse(tarea.checklistFiltro).length} de {tarea.area.checklistItems?.length})
+            </div>
+          )}
           <div className="space-y-2">
-            {tarea.area.checklistItems?.map(item => {
-              const completado = completaciones.some(c => c.checklistItemId === item.id)
+            {(tarea.tieneGrupoHospedado
+              ? tarea.checklistGrupo
+              : tarea.checklistFiltro
+                ? tarea.area.checklistItems?.filter(i => JSON.parse(tarea.checklistFiltro).includes(i.id))
+                : tarea.area.checklistItems
+            )?.map(item => {
+              const completado = item.especial
+                ? false // ítems especiales no se guardan en BD (son visuales)
+                : completaciones.some(c => c.checklistItemId === item.id)
               return (
                 <label key={item.id} className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all ${completado ? 'bg-green-50' : 'bg-slate-50 hover:bg-slate-100'}`}>
                   <input
                     type="checkbox"
                     checked={completado}
-                    onChange={e => onToggle(tarea.id, item.id, e.target.checked)}
+                    onChange={e => !item.especial && onToggle(tarea.id, item.id, e.target.checked)}
                     className="w-5 h-5 rounded-md accent-violet-600"
                   />
                   <span className={`text-sm flex-1 ${completado ? 'line-through text-slate-400' : 'text-slate-700'}`}>
@@ -449,9 +501,43 @@ function TarjetaTarea({ tarea, abierta, onAbrir, onIniciar, onToggle, onReportar
               )
             })}
           </div>
+
+          {/* Comentario */}
+          {mostrarComentario ? (
+            <div className="space-y-2">
+              <textarea
+                value={comentarioTexto}
+                onChange={e => setComentarioTexto(e.target.value)}
+                placeholder="Ej: Faltó detergente, hay daño en la pared..."
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm resize-none"
+                rows={3}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={guardarComentario}
+                  disabled={guardandoComentario || !comentarioTexto.trim()}
+                  className="flex-1 bg-violet-600 text-white rounded-xl py-2 text-sm font-medium disabled:opacity-50"
+                >
+                  {guardandoComentario ? 'Guardando...' : '💾 Guardar nota'}
+                </button>
+                <button onClick={() => setMostrarComentario(false)} className="flex-1 btn-secondary text-sm py-2">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setMostrarComentario(true)}
+              className="w-full border border-slate-200 text-slate-500 bg-slate-50 rounded-xl py-2 text-xs font-medium hover:bg-slate-100"
+            >
+              {tarea.comentario ? `💬 Editar nota: "${tarea.comentario.substring(0, 30)}${tarea.comentario.length > 30 ? '...' : ''}"` : '💬 Agregar nota o comentario'}
+            </button>
+          )}
+
           <button
             onClick={() => onReportar(tarea.areaId, tarea.area.nombre)}
-            className="w-full mt-3 border border-red-200 text-red-600 bg-red-50 rounded-xl py-2 text-xs font-medium hover:bg-red-100"
+            className="w-full border border-red-200 text-red-600 bg-red-50 rounded-xl py-2 text-xs font-medium hover:bg-red-100"
           >
             ⚠️ Reportar suministro faltante
           </button>

@@ -111,6 +111,9 @@ export default function DashboardSupervisora() {
                   <p className="text-xs text-slate-500">{t.usuario.nombre.split(' ')[0]}
                     {t.minutosTotal ? ` · ${t.minutosTotal} min` : ''}
                   </p>
+                  {t.comentario && (
+                    <p className="text-xs text-amber-700 mt-0.5">💬 {t.comentario}</p>
+                  )}
                 </div>
                 <div className="flex gap-1.5 flex-shrink-0">
                   <button

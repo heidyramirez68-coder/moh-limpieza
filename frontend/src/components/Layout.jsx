@@ -1,23 +1,24 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { format, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
+import { useSemana } from '../context/SemanaContext'
+import { format, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import io from 'socket.io-client'
 import toast from 'react-hot-toast'
+import OfflineBanner from './OfflineBanner'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 export default function Layout({ children }) {
   const { usuario, logout } = useAuth()
+  const { semanaVista } = useSemana()
+  usePushNotifications()
   const location = useLocation()
   const navigate = useNavigate()
   const [menuAbierto, setMenuAbierto] = useState(false)
-  const [alertas, setAlertas] = useState([])
 
-  // Semana actual
-  const hoy = new Date()
-  const inicioSemana = startOfWeek(hoy, { weekStartsOn: 1 })
-  const finSemana = endOfWeek(hoy, { weekStartsOn: 1 })
-  const rangoSemana = `${format(inicioSemana, "d 'de' MMMM", { locale: es })} — ${format(finSemana, "d 'de' MMMM", { locale: es })}`
+  // Rango de la semana que se está viendo en la página activa
+  const rangoSemana = `${format(semanaVista, "d 'de' MMMM", { locale: es })} — ${format(addDays(semanaVista, 6), "d 'de' MMMM", { locale: es })}`
 
   // Socket.io
   useEffect(() => {
@@ -33,6 +34,8 @@ export default function Layout({ children }) {
       duration: 10000,
       style: { background: '#dc2626', color: '#fff', fontWeight: '600' }
     }))
+    socket.on('area_verificada', ({ mensaje }) => toast.success(mensaje, { icon: '🔍', duration: 6000 }))
+    socket.on('comentario_tarea', ({ mensaje }) => toast(mensaje, { icon: '💬', duration: 7000, style: { background: '#1e40af', color: '#fff' } }))
 
     return () => socket.disconnect()
   }, [usuario])
@@ -60,6 +63,7 @@ export default function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <OfflineBanner />
       {/* Header */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">

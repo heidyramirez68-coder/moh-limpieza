@@ -2,6 +2,7 @@ const express = require('express')
 const { PrismaClient } = require('@prisma/client')
 const { authMiddleware, soloCoordinadora, coordinadoraOSupervisora } = require('../middleware/auth')
 const { addDays, format, startOfDay } = require('date-fns')
+const { enviarPush, enviarPushRol } = require('../push')
 
 const router = express.Router()
 const prisma = new PrismaClient()
@@ -14,6 +15,18 @@ const rangoUtcDia = (fechaStr) => {
     lte: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
   }
 }
+
+// Checklist especial cuando hay grupos hospedados en el área ese día
+const CHECKLIST_CON_GRUPOS = [
+  'Limpiar baños',
+  'Limpiar las bañeras',
+  'Arreglar camas',
+  'Barrer',
+  'Limpiar el piso',
+  'Verificar papel de baño y toallas',
+  'Verificar agua disponible',
+  'Apagar abanicos y luces (si la gente se fue)',
+]
 
 // GET tareas del día para el usuario actual (o todas si es coordinadora/supervisora)
 router.get('/dia/:fecha', authMiddleware, async (req, res) => {
@@ -35,7 +48,40 @@ router.get('/dia/:fecha', authMiddleware, async (req, res) => {
       orderBy: [{ area: { orden: 'asc' } }]
     })
 
-    res.json(tareas)
+    // Verificar si hay grupos hospedados en alguna de las áreas ese día
+    const rango = rangoUtcDia(req.params.fecha)
+    const fechaDia = new Date(rango.gte)
+
+    const grupos = await prisma.playbookGrupo.findMany({
+      where: {
+        fechaLlegada: { lte: fechaDia },
+        fechaSalida: { gte: fechaDia }
+      }
+    })
+    const areasConGrupos = new Set(grupos.map(g => g.areaId))
+
+    // Marcar tareas que tienen grupos hospedados y usar checklist especial
+    const tareasConInfo = tareas.map(t => {
+      const tieneGrupo = areasConGrupos.has(t.areaId) &&
+        ['dormitorio', 'casa_evento', 'casa_internos'].includes(t.area.tipo)
+
+      if (tieneGrupo) {
+        return {
+          ...t,
+          tieneGrupoHospedado: true,
+          checklistGrupo: CHECKLIST_CON_GRUPOS.map((desc, i) => ({
+            id: -(i + 1), // IDs negativos = ítems especiales
+            descripcion: desc,
+            orden: i + 1,
+            activo: true,
+            especial: true
+          }))
+        }
+      }
+      return { ...t, tieneGrupoHospedado: false }
+    })
+
+    res.json(tareasConInfo)
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: 'Error del servidor' })
@@ -80,6 +126,8 @@ router.post('/', authMiddleware, soloCoordinadora, async (req, res) => {
     const io = req.app.get('io')
     io.to(`usuario_${usuarioId}`).emit('nueva_tarea', tarea)
     io.to('coordinadora').emit('tarea_creada', tarea)
+    // Push al teléfono de la empleada
+    await enviarPush(usuarioId, '📋 Nueva tarea asignada', `${tarea.area.nombre} — ${new Date(fecha).toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'short' })}`, '/mis-tareas')
 
     res.json(tarea)
   } catch (e) {
@@ -91,8 +139,12 @@ router.post('/', authMiddleware, soloCoordinadora, async (req, res) => {
 router.post('/asignar-semana', authMiddleware, soloCoordinadora, async (req, res) => {
   try {
     const { asignaciones } = req.body
-    // asignaciones: [{ fecha, areaId, usuarioIds: [id1, id2] }]
     const creadas = []
+    const io = req.app.get('io')
+
+    // Agrupar tareas por usuario para enviar 1 sola push por empleada
+    const tareasPorUsuario = {}
+
     for (const a of asignaciones) {
       for (const uid of a.usuarioIds) {
         const tarea = await prisma.tareaAsignada.create({
@@ -100,10 +152,23 @@ router.post('/asignar-semana', authMiddleware, soloCoordinadora, async (req, res
           include: { area: true, usuario: { select: { id: true, nombre: true, color: true } } }
         })
         creadas.push(tarea)
-        const io = req.app.get('io')
         io.to(`usuario_${uid}`).emit('nueva_tarea', tarea)
+
+        if (!tareasPorUsuario[uid]) tareasPorUsuario[uid] = []
+        tareasPorUsuario[uid].push(tarea.area.nombre)
       }
     }
+
+    // Enviar 1 push por empleada con resumen de sus tareas
+    for (const [uid, areas] of Object.entries(tareasPorUsuario)) {
+      await enviarPush(
+        Number(uid),
+        '📋 Tienes nuevas tareas asignadas',
+        `Jeidi te asignó ${areas.length} área${areas.length > 1 ? 's' : ''}: ${areas.slice(0, 3).join(', ')}${areas.length > 3 ? '...' : ''}`,
+        '/mis-tareas'
+      )
+    }
+
     res.json({ ok: true, creadas: creadas.length })
   } catch (e) {
     res.status(500).json({ error: 'Error del servidor' })
@@ -130,16 +195,15 @@ router.patch('/:id/verificar', authMiddleware, coordinadoraOSupervisora, async (
 
     const io = req.app.get('io')
     if (!aprobada) {
-      // Notificar a la empleada que debe revisar
-      io.to(`usuario_${tarea.usuarioId}`).emit('tarea_revision', {
-        tarea,
-        mensaje: `↩ ${req.usuario.nombre} revisó "${tarea.area.nombre}" — ${nota || 'Necesita revisión'}`
-      })
+      const msgRevision = `↩ ${req.usuario.nombre} revisó "${tarea.area.nombre}" — ${nota || 'Necesita revisión'}`
+      io.to(`usuario_${tarea.usuarioId}`).emit('tarea_revision', { tarea, mensaje: msgRevision })
+      // Push al teléfono de la empleada
+      await enviarPush(tarea.usuarioId, '↩ Necesita revisión', msgRevision, '/mis-tareas')
     }
-    io.to('coordinadora').emit('area_verificada', {
-      tarea,
-      mensaje: `${aprobada ? '✅' : '↩'} Erika verificó: ${tarea.area.nombre} — ${aprobada ? 'OK' : (nota || 'Necesita revisión')}`
-    })
+    const msgVerif = `${aprobada ? '✅' : '↩'} Erika verificó: ${tarea.area.nombre} — ${aprobada ? 'OK' : (nota || 'Necesita revisión')}`
+    io.to('coordinadora').emit('area_verificada', { tarea, mensaje: msgVerif })
+    // Push a coordinadora
+    await enviarPushRol('coordinadora', aprobada ? '✅ Área aprobada' : '↩ Área a revisión', msgVerif, '/dashboard')
 
     res.json(tarea)
   } catch (e) {
@@ -171,6 +235,47 @@ router.patch('/:id/iniciar', authMiddleware, async (req, res) => {
     io.to('coordinadora').emit('tarea_actualizada', actualizada)
     io.to('supervisora').emit('tarea_actualizada', actualizada)
 
+    res.json(actualizada)
+  } catch (e) {
+    res.status(500).json({ error: 'Error del servidor' })
+  }
+})
+
+// PATCH asignar ítems de checklist específicos a una tarea (coordinadora divide trabajo)
+router.patch('/:id/checklist-filtro', authMiddleware, soloCoordinadora, async (req, res) => {
+  try {
+    const { itemIds } = req.body // array de IDs
+    await prisma.tareaAsignada.update({
+      where: { id: Number(req.params.id) },
+      data: { checklistFiltro: itemIds ? JSON.stringify(itemIds) : null }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: 'Error del servidor' })
+  }
+})
+
+// PATCH guardar comentario de empleada
+router.patch('/:id/comentario', authMiddleware, async (req, res) => {
+  try {
+    const { comentario } = req.body
+    const tarea = await prisma.tareaAsignada.findUnique({ where: { id: Number(req.params.id) } })
+    if (!tarea) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (req.usuario.rol === 'empleada' && tarea.usuarioId !== req.usuario.id) {
+      return res.status(403).json({ error: 'No autorizado' })
+    }
+    const actualizada = await prisma.tareaAsignada.update({
+      where: { id: Number(req.params.id) },
+      data: { comentario, comentarioEn: new Date() },
+      include: {
+        area: { include: { checklistItems: { where: { activo: true }, orderBy: { orden: 'asc' } } } },
+        usuario: { select: { id: true, nombre: true, color: true } },
+        checklistCompletaciones: true,
+      }
+    })
+    const io = req.app.get('io')
+    io.to('coordinadora').emit('comentario_tarea', { tarea: actualizada, mensaje: `💬 ${actualizada.usuario.nombre}: "${comentario}" en ${actualizada.area.nombre}` })
+    io.to('supervisora').emit('comentario_tarea', actualizada)
     res.json(actualizada)
   } catch (e) {
     res.status(500).json({ error: 'Error del servidor' })
@@ -235,11 +340,13 @@ router.patch('/:id/checklist/:itemId', authMiddleware, async (req, res) => {
 
     // Si se completó, notificar a coordinadora
     if (estado === 'completada') {
-      io.to('coordinadora').emit('area_completada', {
-        tarea: tareaActualizada,
-        mensaje: `✅ ${tareaActualizada.usuario.nombre} completó: ${tareaActualizada.area.nombre}`
-      })
+      const msg = `✅ ${tareaActualizada.usuario.nombre} completó: ${tareaActualizada.area.nombre}`
+      io.to('coordinadora').emit('area_completada', { tarea: tareaActualizada, mensaje: msg })
       io.to('supervisora').emit('area_completada', tareaActualizada)
+
+      // Push al teléfono de coordinadora y supervisora
+      await enviarPushRol('coordinadora', '✅ Área completada', msg, '/dashboard')
+      await enviarPushRol('supervisora', '🔍 Área lista para verificar', `${tareaActualizada.usuario.nombre.split(' ')[0]} completó: ${tareaActualizada.area.nombre}`, '/supervision')
 
       // Verificar badges
       await verificarBadges(req.usuario.id, tareaActualizada.fecha, io)

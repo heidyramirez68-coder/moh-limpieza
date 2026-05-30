@@ -70,6 +70,9 @@ model TareaAsignada {
   creadoEn       DateTime  @default(now())
 
   checklistCompletaciones ChecklistCompletacion[]
+  comentario       String?   // nota escrita por la empleada
+  comentarioEn     DateTime? // cuándo la escribió
+  checklistFiltro  String?   // JSON: IDs de los ítems asignados a esta persona (null = todos)
 
   // Verificación por supervisora
   verificada    Boolean   @default(false)
@@ -130,4 +133,13 @@ model ConfigApp {
   id    Int    @id @default(autoincrement())
   clave String @unique
   valor String
+}
+
+model PushSubscription {
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  creadoEn   DateTime @default(now())
 }

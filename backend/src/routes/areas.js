@@ -6,10 +6,15 @@ const { authMiddleware, soloCoordinadora } = require('../middleware/auth')
 const router = express.Router()
 const prisma = new PrismaClient()
 
-// GET todas las áreas
+// GET todas las áreas (incluye desactivadas de evento para mostrar botón toggle)
 router.get('/', authMiddleware, async (req, res) => {
   const areas = await prisma.area.findMany({
-    where: { activa: true },
+    where: {
+      OR: [
+        { activa: true },
+        { activaPorEvento: true } // siempre incluir casas de evento aunque estén desactivadas
+      ]
+    },
     include: { checklistItems: { where: { activo: true }, orderBy: { orden: 'asc' } } },
     orderBy: { orden: 'asc' }
   })

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -14,17 +14,18 @@ export default function DashboardCoordinadora() {
 
   useEffect(() => { cargarDatos() }, [fechaVista])
 
-  // Notificaciones en tiempo real
+  // Refrescar datos en tiempo real (las notificaciones las maneja Layout.jsx)
   useEffect(() => {
     const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001', { transports: ['websocket', 'polling'] })
     socket.emit('join_room', 'coordinadora')
 
-    socket.on('area_completada', ({ tarea, mensaje }) => {
-      toast.success(mensaje || `✅ Área completada`, {
-        duration: 8000,
-        style: { background: '#065f46', color: '#fff', fontWeight: '600', maxWidth: '350px' }
-      })
-      // Refrescar datos si estamos viendo hoy
+    // Solo refrescar datos, el toast ya lo muestra Layout.jsx
+    socket.on('area_completada', () => {
+      const hoyStr = format(new Date(), 'yyyy-MM-dd')
+      if (fechaVista === hoyStr) cargarDatos()
+    })
+
+    socket.on('area_verificada', () => {
       const hoyStr = format(new Date(), 'yyyy-MM-dd')
       if (fechaVista === hoyStr) cargarDatos()
     })
@@ -221,6 +222,7 @@ export default function DashboardCoordinadora() {
                           <span>{tarea.estado === 'completada' ? '✅' : tarea.estado === 'en_progreso' ? '🔄' : '⏳'}</span>
                           <span className="flex-1 text-slate-700 truncate">{tarea.area.nombre}</span>
                           {tarea.pasadoDeAyer && <span className="text-xs text-amber-500">📅</span>}
+                          {tarea.comentario && <span className="text-xs text-amber-600" title={tarea.comentario}>💬</span>}
                           {totalItems > 0 && (
                             <span className="text-xs text-slate-400">{completacionesTarea}/{totalItems}</span>
                           )}
