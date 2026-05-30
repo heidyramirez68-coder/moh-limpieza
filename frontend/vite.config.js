@@ -22,14 +22,12 @@ export default defineConfig({
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
         ]
       },
-      strategies: 'injectManifest',
-      srcDir: 'public',
-      filename: 'sw.js',
+      strategies: 'generateSW',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/tareas\/dia\//,
+            urlPattern: /^https:\/\/moh-limpieza\.onrender\.com\/api\/tareas\/dia\//,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'tareas-cache',
@@ -38,14 +36,9 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /^\/api\/areas/,
+            urlPattern: /^https:\/\/moh-limpieza\.onrender\.com\/api\/areas/,
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'areas-cache', expiration: { maxAgeSeconds: 60 * 60 * 24 * 7 } }
-          },
-          {
-            urlPattern: /^\/api\/usuarios/,
-            handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'usuarios-cache', expiration: { maxAgeSeconds: 60 * 60 * 24 * 7 } }
           },
         ]
       }
