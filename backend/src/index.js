@@ -61,8 +61,25 @@ io.on('connection', (socket) => {
 })
 
 const PORT = process.env.PORT || 3001
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`\n🚀 MOH Limpieza Backend corriendo en puerto ${PORT}`)
   console.log(`📡 Socket.io activo`)
   console.log(`🌐 Frontend esperado en: ${process.env.FRONTEND_URL || 'http://localhost:5173'}\n`)
+
+  // Auto-seed si no hay usuarios
+  try {
+    const { PrismaClient } = require('@prisma/client')
+    const bcrypt = require('bcryptjs')
+    const prisma = new PrismaClient()
+    const count = await prisma.usuario.count()
+    if (count === 0) {
+      console.log('🌱 Base de datos vacía, ejecutando seed automático...')
+      const { execSync } = require('child_process')
+      execSync('node prisma/seed.js', { stdio: 'inherit', cwd: require('path').join(__dirname, '..') })
+      console.log('✅ Seed completado')
+    }
+    await prisma.$disconnect()
+  } catch (e) {
+    console.log('Seed info:', e.message)
+  }
 })
