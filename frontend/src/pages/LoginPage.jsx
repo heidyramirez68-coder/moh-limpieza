@@ -1,29 +1,31 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
+import axios from 'axios'
 
-const COLORES_USUARIO = {
-  'Jeidi Ramírez': '#7C3AED',
-  'Erika': '#0891B2',
-  'Yakira': '#059669',
-  'Yinelda': '#DC2626',
-  'Ederlin': '#D97706',
-  'Senaida': '#BE185D',
-  'Katherine': '#7C3AED',
-  'Ana Iris': '#65A30D',
-}
+const API = import.meta.env.VITE_API_URL || ''
 
 export default function LoginPage() {
   const [nombre, setNombre] = useState('')
   const [password, setPassword] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [usuarios, setUsuarios] = useState([])
+  const [mostrarRecuperar, setMostrarRecuperar] = useState(false)
+  const [emailRecuperar, setEmailRecuperar] = useState('')
+  const [enviandoEmail, setEnviandoEmail] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  useEffect(() => {
+    axios.get(`${API}/api/auth/usuarios-publicos`)
+      .then(r => setUsuarios(r.data))
+      .catch(() => {})
+  }, [])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!nombre || !password) return toast.error('Ingresa tu nombre y contraseña')
+    if (!nombre || !password) return toast.error('Selecciona tu nombre y contraseña')
     setCargando(true)
     try {
       const usuario = await login(nombre, password)
@@ -42,9 +44,26 @@ export default function LoginPage() {
     }
   }
 
+  const handleRecuperar = async (e) => {
+    e.preventDefault()
+    if (!nombre) return toast.error('Primero selecciona tu nombre')
+    if (!emailRecuperar) return toast.error('Ingresa tu email')
+    setEnviandoEmail(true)
+    try {
+      await axios.post(`${API}/api/auth/recuperar-password`, { nombre, email: emailRecuperar })
+      toast.success('¡Revisa tu email! Te enviamos una contraseña temporal.')
+      setMostrarRecuperar(false)
+      setEmailRecuperar('')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'No se pudo enviar el email')
+    } finally {
+      setEnviandoEmail(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-900 via-violet-800 to-indigo-900 flex flex-col items-center justify-center p-4">
-      {/* Logo y nombre */}
+      {/* Logo */}
       <div className="text-center mb-8">
         <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
           <span className="text-4xl">🧹</span>
@@ -66,14 +85,17 @@ export default function LoginPage() {
         <h2 className="text-slate-800 font-bold text-xl mb-5 text-center">Iniciar sesión</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-slate-600 block mb-1">Tu nombre</label>
-            <input
-              type="text"
+            <label className="text-sm font-medium text-slate-600 block mb-1">¿Quién eres?</label>
+            <select
               value={nombre}
               onChange={e => setNombre(e.target.value)}
-              placeholder="Ej: Yakira"
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-            />
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white"
+            >
+              <option value="">— Selecciona tu nombre —</option>
+              {usuarios.map(u => (
+                <option key={u.id} value={u.nombre}>{u.nombre}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="text-sm font-medium text-slate-600 block mb-1">Contraseña</label>
@@ -93,9 +115,34 @@ export default function LoginPage() {
             {cargando ? 'Entrando...' : 'Entrar →'}
           </button>
         </form>
-        <p className="text-center text-xs text-slate-400 mt-4">
-          Si olvidaste tu contraseña, habla con Jeidi
-        </p>
+
+        <button
+          onClick={() => setMostrarRecuperar(!mostrarRecuperar)}
+          className="w-full text-center text-sm text-violet-600 mt-4 hover:underline"
+        >
+          ¿Olvidaste tu contraseña?
+        </button>
+
+        {mostrarRecuperar && (
+          <form onSubmit={handleRecuperar} className="mt-4 space-y-3 border-t pt-4">
+            <p className="text-xs text-slate-500 text-center">Te enviaremos una contraseña temporal a tu email</p>
+            {!nombre && <p className="text-xs text-red-500 text-center">↑ Primero selecciona tu nombre arriba</p>}
+            <input
+              type="email"
+              value={emailRecuperar}
+              onChange={e => setEmailRecuperar(e.target.value)}
+              placeholder="Tu email"
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={enviandoEmail}
+              className="w-full bg-slate-600 hover:bg-slate-700 disabled:bg-slate-400 text-white font-semibold py-2 rounded-xl transition-all text-sm"
+            >
+              {enviandoEmail ? 'Enviando...' : 'Enviar contraseña temporal'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   )
